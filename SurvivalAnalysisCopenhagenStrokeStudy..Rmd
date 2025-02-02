@@ -1,0 +1,228 @@
+---
+title: "SurvivalAnalysisCopenhagenStrokeStudy"
+author: "Duc-Anh Nguyen"
+date: "2025-02-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## EDA
+The *cost* dataset from package *pec* collects information from the Copenhagen Stroke Study from 1991 to 1993 (3 years)
+```{r}
+#install.packages("pec")
+library(pec)
+library(tidyverse)
+
+data(cost)
+head(cost)
+skimr::skim(cost)
+```
+
+*status* is the variable to predict
+*time* measures the length each patient survived in days, value range from 1 to 4262 (11.5 years) 
+```{r}
+cost <- cost |> select(time, status, age, sex, alcohol, diabetes, smoke)
+dim(cost)
+prop.table(table(cost$status))
+
+colnames(cost)
+skimr::skim(cost)
+```
+There are 518 patients in this dataset, 22% from them survived after this study, so their data are right censored.
+Time and age are the only 2 numerical covariates, the rest are binary
+
+Let us visualise what we have: we try to see what would impact the survival time (in y axis)
+```{r}
+# install.packages("gridExtra")
+# age
+
+plot1 <-
+  ggplot(mapping = aes(
+    x = age,
+    y = time,
+    color = as.factor(status)
+  ),
+  data = cost) + geom_point() + theme() + ggtitle("Age") + xlab("Age") + ylab("Time in days") + scale_color_discrete(name = "Event", labels = c("0", "1"))
+
+# sex
+plot2 <- ggplot(mapping = aes(x = sex, y = time, fill = sex), data = cost) +
+  geom_boxplot() + theme() + ggtitle("Sex") + xlab("Sex") +
+  ylab("Time in days") + theme(legend.position = "none")
+
+# alcohol
+plot3 <- ggplot(mapping = aes(x = alcohol, y = time, fill = alcohol),
+                data = cost) +
+  geom_boxplot() + theme() + ggtitle("Alcohol consumption") + xlab("Alcohol consumption") +
+  ylab("Time in days") + theme(legend.position = "none")
+
+# diabetes
+plot4 <- ggplot(mapping = aes(x = diabetes, y = time, fill = diabetes),
+                data = cost) +
+  geom_boxplot() + theme() + ggtitle("Diabetes") +
+  xlab("Diabetes") + ylab("Time in days") +
+  theme(legend.position = "none")
+
+# smoke
+plot5 <- ggplot(mapping = aes(x = smoke, y = time, fill = smoke),
+                data = cost) +
+  geom_boxplot() + theme() + ggtitle("Smoker") + xlab("Smoker") +
+  ylab("Time in days") + theme(legend.position = "none")
+
+gridExtra::grid.arrange(plot1, plot2, plot3, plot4, plot5, nrow = 2)
+
+```
++ Age: there is not really much of a pattern here. All the patients younger than 40 yo survived the study
++ Sex: not much different between the two sexes
++ With diabetes the survival time is shorter, meanwhile consuming alcohol showing a longer survival time. For smoker the median survival time is no difference from non-smoker.
+
+
+Now visualising with Kaplan-Meier   
+```{r}
+library(survival)
+library(survminer)
+km <- survfit(formula = Surv(time = time, event = status) ~ 1, type = "kaplan-meier", data = cost)
+km
+ggsurvplot(fit = km, data = cost, conf.int = TRUE, surv.median.line = "hv", xlab = "t", ylab = "S(t)", legend = "none", title = "Kaplan-Meier-Estimation")
+```
+50% the patients survived till day 1794 (bit less than 5 years)
+
+Now let us visualise more focusly on each covariates: age, sex, diabtetes, alcohol and smoke. For age we will bin 2 groups: younger than median and older
+```{r}
+plots <- list()
+
+# age
+cost <-
+  cost |> mutate(age_med = ifelse(
+    test = age > median(age),
+    yes = "yes",
+    no = "no"
+  ))
+km_age_med <-
+  survfit(
+    formula = Surv(time = time, event = status) ~ age_med,
+    type = "kaplan-meier",
+    data = cost
+  )
+km_age_med
+plots[[1]] <-
+  ggsurvplot(
+    fit = km_age_med,
+    data = cost,
+    surv.median.line = "hv",
+    xlab = "t",
+    ylab = "S(t)",
+    legend = "bottom",
+    legend.title = "",
+    title = "Age groups"
+  )
+
+
+
+
+# sex:
+km_sex <- survfit(
+  formula = Surv(time = time, event = status) ~ sex,
+  type = "kaplan-meier",
+  data = cost
+)
+km_sex
+plots[[2]] <- ggsurvplot(
+  fit = km_sex,
+  data = cost,
+  surv.median.line = "hv",
+  xlab = "t",
+  ylab = "S(t)",
+  legend = "bottom",
+  legend.title = "",
+  title = "Geschlecht"
+)
+
+
+
+
+# alcohol consumption:
+km_alcohol <- survfit(
+  formula = Surv(time = time, event = status) ~ alcohol,
+  type = "kaplan-meier",
+  data = cost
+)
+km_alcohol
+plots[[3]] <-
+  ggsurvplot(
+    fit = km_alcohol,
+    data = cost,
+    surv.median.line = "hv",
+    xlab = "t",
+    ylab = "S(t)",
+    legend = "bottom",
+    legend.title = "",
+    title = "Alcohol consumption"
+  )
+
+
+# diabetes:
+km_diabetes <- survfit(
+  formula = Surv(time = time, event = status) ~ diabetes,
+  type = "kaplan-meier",
+  data = cost
+)
+km_diabetes
+plots[[4]] <- ggsurvplot(
+  fit = km_diabetes,
+  data = cost,
+  surv.median.line = "hv",
+  xlab = "t",
+  ylab = "S(t)",
+  legend = "bottom",
+  legend.title = "",
+  title = "Diabetes"
+)
+
+
+# Smoker:
+km_smoke <- survfit(
+  formula = Surv(time = time, event = status) ~ smoke,
+  type = "kaplan-meier",
+  data = cost
+)
+km_smoke
+plots[[5]] <-
+  ggsurvplot(
+    fit = km_smoke,
+    data = cost,
+    surv.median.line = "hv",
+    xlab = "t",
+    ylab = "S(t)",
+    legend = "bottom",
+    legend.title = "",
+    title = "Smoker"
+  )
+
+arrange_ggsurvplots(plots, nrow = 2, ncol = 3)
+```
+The Kaplan-Meier Curves allign with our initial visualisations
++ Age: the younger group has median survival time 2 as long as the older (2233 vs 1169 days)
++ Just as our first visualisation, the survival chance of people without *diabetes* is higher than people with, and higher for people who drinks alcohol than not drinking
++ *Smoker*'s chance of survival is not much of a diffence from non-smoker, but only till day 1800, after that smoker has a slightly higher chance of suvive
+
+With Kaplan-Meier curve we can only see effect of each covariate. Now we want to fit a regression model for multivariate analysis!
+
+
+
+## Analysis of suvival time of stroke patient with *Cox model*
+```{r}
+model <- survival::coxph(formula = Surv(time, status)~age + sex + alcohol + diabetes + smoke, data = cost)
+summary(model)
+```
++ Age: the hazard rate λ(t) (the risk in the consecutive moment t+1 to die when one survive till t) rises avg. exponentitallly exp(0.055) = 1.06 for each extra year of surviving, c.p.
+
++ Sex: for men the rate rises every year extra 1.4014 compared to women, c.p.
++ Alcohol: people using alcohol have a lower hazard rate than not using (0.9174 times as high), c.p.
+
++ Diabetes: With diabetes is the rate 1.5542 times higher than without, c.p.
+
++ Smoker: Non-Smoker have a higher hazard rate (1.2931 times higher than smoker) c.p.
+
